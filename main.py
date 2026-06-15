@@ -1,16 +1,26 @@
 import asyncio
 import aiohttp
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
+
+# Crucial for Vercel: Define the top-level app instance
+app = FastAPI()
 
 ACCOUNT_URL = "https://www.netflix.com/YourAccount"
 TARGET_SVG_PATH = 'd="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0m1.5 3h-3l.833 7h1.334zM8 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2"'
 TARGET_ICON_ATTR = 'data-icon="CircleExclamationPointSmall"'
+
+# Define Pydantic schema for structured API JSON output
+class StatusResponse(BaseModel):
+    status: str
+    result: str
+    details: str
 
 async def check_account_status_api(login_link: str) -> dict:
     """
     Asynchronous worker designed to accept a validation URL and return a 
     structured status response dict suitable for dynamic JSON serialization.
     """
-    # High-performance request headers configuration
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -18,7 +28,7 @@ async def check_account_status_api(login_link: str) -> dict:
         "Connection": "keep-alive"
     }
     
-    # Aggressive connection resource settings to minimize request-handshake latencies
+    # TCP Connector setup
     connector = aiohttp.TCPConnector(ssl=False, ttl_dns_cache=300, limit=1)
     timeout = aiohttp.ClientTimeout(total=5.0) 
     
@@ -30,7 +40,6 @@ async def check_account_status_api(login_link: str) -> dict:
                     return {
                         "status": "error",
                         "result": "INVALID_ENTRY_LINK",
-                        "http_code": init_resp.status,
                         "details": "The session entry link refused to connect properly."
                     }
 
@@ -74,3 +83,9 @@ async def check_account_status_api(login_link: str) -> dict:
                 "result": "CONNECTION_FAILURE",
                 "details": str(e)
             }
+
+# Expose the API endpoint route via the FastAPI 'app' instance
+@app.get("/api/check", response_model=StatusResponse)
+async def check_endpoint(url: str = Query(..., description="The session entry url link")):
+    response_data = await check_account_status_api(url)
+    return response_data
